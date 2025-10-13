@@ -29,6 +29,8 @@ project.getTasks().withType(JavaCompile) {
 
 apply plugin: "com.android.library"
 
+apply from: "./resolve_dependencies.gradle"
+
 android {
     namespace "com.ryanheise.just_audio"
 
