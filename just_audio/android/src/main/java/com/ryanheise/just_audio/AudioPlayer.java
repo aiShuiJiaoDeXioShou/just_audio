@@ -81,6 +81,8 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
     private final MethodChannel methodChannel;
     private final BetterEventChannel eventChannel;
     private final BetterEventChannel dataEventChannel;
+    private final BetterEventChannel fftEventChannel;
+    private FFTAudioProcessor fftAudioProcessor;
 
     private ProcessingState processingState;
     private long updatePosition;
@@ -176,6 +178,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         methodChannel.setMethodCallHandler(this);
         eventChannel = new BetterEventChannel(messenger, "com.ryanheise.just_audio.events." + id);
         dataEventChannel = new BetterEventChannel(messenger, "com.ryanheise.just_audio.data." + id);
+        fftEventChannel = new BetterEventChannel(messenger, "com.ryanheise.just_audio.fft." + id);
         processingState = ProcessingState.idle;
         if (audioLoadConfiguration != null) {
             Map<?, ?> loadControlMap = (Map<?, ?>)audioLoadConfiguration.get("androidLoadControl");
@@ -776,13 +779,28 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
 
     private void ensurePlayerInitialized() {
         if (player == null) {
-            RenderersFactory renderersFactory = (eventHandler, videoListener, audioListener, textOutput, metadataOutput) -> {
-                Renderer[] defaultRenderers = new DefaultRenderersFactory(context)
-                    .createRenderers(eventHandler, videoListener, audioListener, textOutput, metadataOutput);
-                Renderer[] allRenderers = Arrays.copyOf(defaultRenderers, defaultRenderers.length + 1);
-                allRenderers[defaultRenderers.length] = new ObserverRenderer();
-                return allRenderers;
+            fftAudioProcessor = new FFTAudioProcessor();
+            fftAudioProcessor.setListener(data -> {
+                // It's better to send data on the main thread if UI will be updated
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    List<Float> fftDataList = new ArrayList<>();
+                    for (float f : data) {
+                        fftDataList.add(f);
+                    }
+                    fftEventChannel.success(fftDataList);
+                });
+            });
+
+            RenderersFactory renderersFactory = new DefaultRenderersFactory(context) {
+                @Override
+                protected androidx.media3.exoplayer.audio.AudioSink buildAudioSink(
+                        Context context, boolean enableFloatOutput, boolean enableAudioTrackPlaybackParams) {
+                    return new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                            .setAudioProcessors(new androidx.media3.common.audio.AudioProcessor[]{fftAudioProcessor})
+                            .build();
+                }
             };
+
             ExoPlayer.Builder builder = new ExoPlayer.Builder(context, renderersFactory);
             builder.setUseLazyPreparation(useLazyPreparation);
             if (loadControl != null) {
@@ -1066,6 +1084,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         }
         eventChannel.endOfStream();
         dataEventChannel.endOfStream();
+        fftEventChannel.endOfStream();
     }
 
     private void abortSeek() {

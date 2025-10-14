@@ -2,6 +2,8 @@ package com.ryanheise.just_audio;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
+import androidx.media3.common.util.UnstableApi;
+
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
@@ -11,6 +13,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 
+@UnstableApi
 public class MainMethodCallHandler implements MethodCallHandler {
 
     private final Context applicationContext;
