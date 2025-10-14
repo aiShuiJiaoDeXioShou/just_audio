@@ -534,18 +534,18 @@ class AudioPlayer {
       _icyMetadataSubject.stream.distinct();
 
   EventChannel? _fftEventChannel;
-  Stream<List<double>>? _fftStream;
+  Stream<Uint8List>? _fftStream;
 
   /// A stream of FFT data from the audio, if available.
   ///
-  /// Each list of doubles represents the magnitudes of the frequency bins.
+  /// Each value is a list of bytes representing the magnitudes of the frequency bins.
   /// This is currently available only on Android.
-  Stream<List<double>> get fftStream {
+  Stream<Uint8List> get fftStream {
     // The event channel is tied to the player's ID.
     _fftEventChannel ??= EventChannel('com.ryanheise.just_audio.fft.$_id');
     _fftStream ??= _fftEventChannel!
         .receiveBroadcastStream()
-        .map((data) => (data as List<dynamic>).cast<double>().toList());
+        .map((data) => data as Uint8List);
     return _fftStream!;
   }
 

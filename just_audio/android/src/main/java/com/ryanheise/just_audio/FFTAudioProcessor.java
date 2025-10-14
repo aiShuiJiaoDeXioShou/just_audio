@@ -23,13 +23,13 @@ public class FFTAudioProcessor implements AudioProcessor {
 
     private DoubleFFT_1D fft;
     private double[] fftInput;
-    private float[] magnitudes;
+    private byte[] fftBytes;
     private FFTListener listener;
 
     private static final int FFT_SIZE = 1024;
 
     public interface FFTListener {
-        void onFFTData(float[] data);
+        void onFFTData(byte[] data);
     }
 
     public void setListener(FFTListener listener) {
@@ -45,7 +45,7 @@ public class FFTAudioProcessor implements AudioProcessor {
         this.outputAudioFormat = inputAudioFormat; // Passthrough, same format as input
         fft = new DoubleFFT_1D(FFT_SIZE);
         fftInput = new double[FFT_SIZE];
-        magnitudes = new float[FFT_SIZE / 2];
+        fftBytes = new byte[FFT_SIZE / 2];
         return outputAudioFormat;
     }
 
@@ -74,7 +74,6 @@ public class FFTAudioProcessor implements AudioProcessor {
                     fftInput[i] = sample / inputAudioFormat.channelCount;
                 }
 
-                // Zero-pad if not enough samples
                 if (samplesToProcess < FFT_SIZE) {
                     Arrays.fill(fftInput, samplesToProcess, FFT_SIZE, 0.0);
                 }
@@ -84,15 +83,21 @@ public class FFTAudioProcessor implements AudioProcessor {
                 for (int i = 0; i < FFT_SIZE / 2; i++) {
                     double real = fftInput[2 * i];
                     double imag = fftInput[2 * i + 1];
-                    magnitudes[i] = (float) Math.sqrt(real * real + imag * imag);
+                    double magnitude = Math.sqrt(real * real + imag * imag);
+                    double dbValue = 20 * Math.log10(magnitude + 1e-6);
+
+                    final double minDb = -60.0;
+                    final double maxDb = 0.0;
+                    double scaledValue = ((dbValue - minDb) / (maxDb - minDb)) * 255.0;
+                    int byteValue = (int) Math.max(0, Math.min(255, scaledValue));
+                    fftBytes[i] = (byte) byteValue;
                 }
 
                 if (listener != null) {
-                    listener.onFFTData(magnitudes);
+                    listener.onFFTData(fftBytes);
                 }
             }
         }
-        // CRITICAL: Make the original input buffer our output buffer to pass it down the chain.
         outputBuffer = inputBuffer;
     }
 
@@ -120,8 +125,8 @@ public class FFTAudioProcessor implements AudioProcessor {
         if (fftInput != null) {
             Arrays.fill(fftInput, 0.0);
         }
-        if (magnitudes != null) {
-            Arrays.fill(magnitudes, 0.0f);
+        if (fftBytes != null) {
+            Arrays.fill(fftBytes, (byte) 0);
         }
     }
 

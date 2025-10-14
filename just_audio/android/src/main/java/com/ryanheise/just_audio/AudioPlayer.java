@@ -781,13 +781,9 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         if (player == null) {
             fftAudioProcessor = new FFTAudioProcessor();
             fftAudioProcessor.setListener(data -> {
-                // It's better to send data on the main thread if UI will be updated
+                // data is now a byte[], which can be sent directly.
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    List<Float> fftDataList = new ArrayList<>();
-                    for (float f : data) {
-                        fftDataList.add(f);
-                    }
-                    fftEventChannel.success(fftDataList);
+                    fftEventChannel.success(data);
                 });
             });
 
