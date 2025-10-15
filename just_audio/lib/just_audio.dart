@@ -171,7 +171,7 @@ class AudioPlayer {
   final _playerStateSubject = BehaviorSubject<PlayerState>.seeded(
       PlayerState(false, ProcessingState.idle));
 
-  final _fftDataSubject = PublishSubject<List<double>>(sync: true);
+  final _fftDataSubject = PublishSubject<Uint8List>(sync: true);
   StreamSubscription? _fftEventChannelSubscription;
 
   var _seeking = false;
@@ -536,13 +536,10 @@ class AudioPlayer {
   Stream<IcyMetadata?> get icyMetadataStream =>
       _icyMetadataSubject.stream.distinct();
 
-  EventChannel? _fftEventChannel;
-  Stream<List<double>>? _fftStream;
-
   /// A stream of FFT data from the audio, if available.
   ///
   /// Each list of doubles represents the raw magnitudes of the frequency bins.
-  Stream<List<double>> get fftStream => _fftDataSubject.stream;
+  Stream<Uint8List> get fftStream => _fftDataSubject.stream;
 
 
   /// The current player state containing only the processing and playing
@@ -1684,7 +1681,7 @@ class AudioPlayer {
         final fftEventChannel = EventChannel('com.ryanheise.just_audio.fft.$_id');
         _fftEventChannelSubscription = fftEventChannel
             .receiveBroadcastStream()
-            .map((data) => (data as List<dynamic>).cast<double>())
+            .map((data) => data as Uint8List)
             .listen(_fftDataSubject.add, onError: _fftDataSubject.addError);
 
         if (playlist.children.isNotEmpty) {
