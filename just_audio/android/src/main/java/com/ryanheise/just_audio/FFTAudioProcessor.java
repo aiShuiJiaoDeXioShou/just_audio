@@ -118,39 +118,93 @@ public class FFTAudioProcessor implements AudioProcessor {
      * 
      * 根据Android Visualizer的规范，数据应该是8-bit magnitude FFT
      * 我们需要将JTransforms的double结果转换为byte，并保持正确的比例关系
+     * 
+     * 针对音乐和人声优化：
+     * 1. 使用对数缩放增强低幅度分量的可见性
+     * 2. 应用加重函数突出人声频率范围(300Hz-3400Hz)
+     * 3. 动态范围压缩使数据更适合可视化
      */
     private void convertToVisualizerFormat(double[] fftData, byte[] bytes) {
-        // DC分量 (实部) - 存储在索引0
-        // 由于是实数FFT，DC分量没有虚部
-        bytes[0] = (byte) Math.max(Byte.MIN_VALUE, Math.min(Byte.MAX_VALUE, fftData[0] * 128.0));
+        // 计算幅度并应用优化处理
+        double[] magnitudes = new double[FFT_SIZE / 2];
+        double maxMagnitude = 0.0;
         
-        // Nyquist分量 (实部) - 存储在索引1
-        // 由于是实数FFT，Nyquist分量没有虚部
-        bytes[1] = (byte) Math.max(Byte.MIN_VALUE, Math.min(Byte.MAX_VALUE, fftData[1] * 128.0));
+        // DC分量 (频率为0)
+        magnitudes[0] = Math.abs(fftData[0]);
+        maxMagnitude = Math.max(maxMagnitude, magnitudes[0]);
         
-        // 其余频率分量
-        // 根据JTransforms文档，对于实数FFT，结果存储为:
-        // [Real(0), Real(1), Imag(1), Real(2), Imag(2), ..., Real(N/2), Imag(N/2)]
-        // 但是在Android Visualizer中，数据格式是:
-        // [Rf0, Rf(n/2), Rf1, If1, Rf2, If2, ..., Rf(n-1)/2, If(n-1)/2]
+        // Nyquist分量
+        magnitudes[FFT_SIZE / 2 - 1] = Math.abs(fftData[1]);
+        maxMagnitude = Math.max(maxMagnitude, magnitudes[FFT_SIZE / 2 - 1]);
+        
+        // 其他频率分量
         for (int i = 1; i < FFT_SIZE / 2; i++) {
-            double real, imag;
+            double real = fftData[2 * i];
+            double imag = fftData[2 * i + 1];
+            // 计算幅度
+            magnitudes[i] = Math.sqrt(real * real + imag * imag);
             
-            if (i == FFT_SIZE / 2) {
-                // Nyquist频率已经在bytes[1]中处理过了
-                continue;
-            } else {
-                // 获取实部和虚部
-                real = fftData[2 * i];
-                imag = fftData[2 * i + 1];
+            // 对人声频率范围(大约在索引10-100之间)应用加重
+            // 这个范围大致对应300Hz-3400Hz(人声的主要频率范围)
+            if (i >= 10 && i <= 100) {
+                magnitudes[i] *= 1.5; // 增强人声频率的权重
             }
             
-            // 转换为byte并存储
-            // 实部存储在索引 2*i
-            bytes[2 * i] = (byte) Math.max(Byte.MIN_VALUE, Math.min(Byte.MAX_VALUE, real * 128.0));
-            // 虚部存储在索引 2*i+1
-            bytes[2 * i + 1] = (byte) Math.max(Byte.MIN_VALUE, Math.min(Byte.MAX_VALUE, imag * 128.0));
+            maxMagnitude = Math.max(maxMagnitude, magnitudes[i]);
         }
+        
+        // 避免除零错误
+        if (maxMagnitude == 0.0) {
+            maxMagnitude = 1.0;
+        }
+        
+        // 转换为byte数组
+        // DC分量
+        bytes[0] = convertMagnitudeToByte(magnitudes[0], maxMagnitude);
+        
+        // Nyquist分量
+        bytes[1] = convertMagnitudeToByte(magnitudes[FFT_SIZE / 2 - 1], maxMagnitude);
+        
+        // 其他频率分量
+        for (int i = 1; i < FFT_SIZE / 2; i++) {
+            // 实部和虚部都使用相同的幅度值进行转换，但保持符号
+            double real = fftData[2 * i];
+            double imag = fftData[2 * i + 1];
+            
+            // 使用对数缩放增强小值的可见性
+            byte realByte = convertMagnitudeToByte(Math.abs(real), maxMagnitude);
+            byte imagByte = convertMagnitudeToByte(Math.abs(imag), maxMagnitude);
+            
+            // 保持符号信息
+            if (real < 0) realByte = (byte) -realByte;
+            if (imag < 0) imagByte = (byte) -imagByte;
+            
+            bytes[2 * i] = realByte;
+            bytes[2 * i + 1] = imagByte;
+        }
+    }
+    
+    /**
+     * 将幅度值转换为byte，使用对数缩放和动态范围压缩
+     * @param magnitude 原始幅度值
+     * @param maxMagnitude 最大幅度值
+     * @return 转换后的byte值
+     */
+    private byte convertMagnitudeToByte(double magnitude, double maxMagnitude) {
+        // 避免log(0)
+        if (magnitude <= 0) {
+            return 0;
+        }
+        
+        // 归一化到[0,1]范围
+        double normalized = magnitude / maxMagnitude;
+        
+        // 应用对数缩放以增强小值的可见性
+        // log(1) = 0, log(10) ≈ 2.3, 所以我们使用log10(normalized * 9 + 1)
+        double logScaled = Math.log10(normalized * 9 + 1);
+        
+        // 映射到byte范围
+        return (byte) (logScaled * 127);
     }
 
     @Override
