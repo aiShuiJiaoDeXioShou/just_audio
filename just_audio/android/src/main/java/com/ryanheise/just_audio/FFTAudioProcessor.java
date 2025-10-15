@@ -23,13 +23,13 @@ public class FFTAudioProcessor implements AudioProcessor {
 
     private DoubleFFT_1D fft;
     private double[] fftInput;
-    private byte[] fftBytes;
+    private double[] magnitudes;
     private FFTListener listener;
 
     private static final int FFT_SIZE = 1024;
 
     public interface FFTListener {
-        void onFFTData(byte[] data);
+        void onFFTData(double[] data);
     }
 
     public void setListener(FFTListener listener) {
@@ -45,7 +45,7 @@ public class FFTAudioProcessor implements AudioProcessor {
         this.outputAudioFormat = inputAudioFormat; // Passthrough, same format as input
         fft = new DoubleFFT_1D(FFT_SIZE);
         fftInput = new double[FFT_SIZE];
-        fftBytes = new byte[FFT_SIZE / 2];
+        magnitudes = new double[FFT_SIZE / 2];
         return outputAudioFormat;
     }
 
@@ -83,18 +83,11 @@ public class FFTAudioProcessor implements AudioProcessor {
                 for (int i = 0; i < FFT_SIZE / 2; i++) {
                     double real = fftInput[2 * i];
                     double imag = fftInput[2 * i + 1];
-                    double magnitude = Math.sqrt(real * real + imag * imag);
-                    double dbValue = 20 * Math.log10(magnitude + 1e-6);
-
-                    final double minDb = -60.0;
-                    final double maxDb = 0.0;
-                    double scaledValue = ((dbValue - minDb) / (maxDb - minDb)) * 255.0;
-                    int byteValue = (int) Math.max(0, Math.min(255, scaledValue));
-                    fftBytes[i] = (byte) byteValue;
+                    magnitudes[i] = Math.sqrt(real * real + imag * imag);
                 }
 
                 if (listener != null) {
-                    listener.onFFTData(fftBytes);
+                    listener.onFFTData(magnitudes);
                 }
             }
         }
@@ -125,8 +118,8 @@ public class FFTAudioProcessor implements AudioProcessor {
         if (fftInput != null) {
             Arrays.fill(fftInput, 0.0);
         }
-        if (fftBytes != null) {
-            Arrays.fill(fftBytes, (byte) 0);
+        if (magnitudes != null) {
+            Arrays.fill(magnitudes, 0.0);
         }
     }
 

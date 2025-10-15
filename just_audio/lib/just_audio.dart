@@ -171,6 +171,9 @@ class AudioPlayer {
   final _playerStateSubject = BehaviorSubject<PlayerState>.seeded(
       PlayerState(false, ProcessingState.idle));
 
+  final _fftDataSubject = PublishSubject<List<double>>(sync: true);
+  StreamSubscription? _fftEventChannelSubscription;
+
   var _seeking = false;
   // ignore: close_sinks
   BehaviorSubject<Duration>? _positionSubject;
@@ -534,20 +537,12 @@ class AudioPlayer {
       _icyMetadataSubject.stream.distinct();
 
   EventChannel? _fftEventChannel;
-  Stream<Uint8List>? _fftStream;
+  Stream<List<double>>? _fftStream;
 
   /// A stream of FFT data from the audio, if available.
   ///
-  /// Each value is a list of bytes representing the magnitudes of the frequency bins.
-  /// This is currently available only on Android.
-  Stream<Uint8List> get fftStream {
-    // The event channel is tied to the player's ID.
-    _fftEventChannel ??= EventChannel('com.ryanheise.just_audio.fft.$_id');
-    _fftStream ??= _fftEventChannel!
-        .receiveBroadcastStream()
-        .map((data) => data as Uint8List);
-    return _fftStream!;
-  }
+  /// Each list of doubles represents the raw magnitudes of the frequency bins.
+  Stream<List<double>> get fftStream => _fftDataSubject.stream;
 
 
   /// The current player state containing only the processing and playing
@@ -1450,12 +1445,14 @@ class AudioPlayer {
       await _currentIndexSubscription?.cancel();
       await _errorsSubscription?.cancel();
       await _errorsResetSubscription?.cancel();
+      await _fftEventChannelSubscription?.cancel();
 
       await _playerEventSubject.close();
 
       await _playbackEventPipe;
 
       await _playbackEventSubject.close();
+      await _fftDataSubject.close();
       await _sequenceStateSubject.close();
       await _playingSubject.close();
       await _volumeSubject.close();
@@ -1682,6 +1679,14 @@ class AudioPlayer {
       if (checkInterruption() || _disposed) return inactiveResult(platform);
 
       if (active) {
+        // Cancel previous FFT subscription and set up new one.
+        await _fftEventChannelSubscription?.cancel();
+        final fftEventChannel = EventChannel('com.ryanheise.just_audio.fft.$_id');
+        _fftEventChannelSubscription = fftEventChannel
+            .receiveBroadcastStream()
+            .map((data) => (data as List<dynamic>).cast<double>())
+            .listen(_fftDataSubject.add, onError: _fftDataSubject.addError);
+
         if (playlist.children.isNotEmpty) {
           _playerEventSubject.add(playerEvent.copyWith(
             playbackEvent: playbackEvent.copyWith(

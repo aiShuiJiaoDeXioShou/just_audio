@@ -22,6 +22,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.Player.PositionInfo;
 import androidx.media3.exoplayer.ExoPlayer;
+import android.util.Log;
 import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences;
@@ -51,7 +52,6 @@ import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.Util;
-import io.flutter.Log;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.EventChannel.EventSink;
@@ -781,7 +781,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         if (player == null) {
             fftAudioProcessor = new FFTAudioProcessor();
             fftAudioProcessor.setListener(data -> {
-                // data is now a byte[], which can be sent directly.
+                // data is now a double[], which can be sent directly.
                 new Handler(Looper.getMainLooper()).post(() -> {
                     fftEventChannel.success(data);
                 });
