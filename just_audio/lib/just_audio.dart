@@ -539,7 +539,10 @@ class AudioPlayer {
   /// A stream of FFT data from the audio, if available.
   ///
   /// Each list of doubles represents the raw magnitudes of the frequency bins.
-  Stream<Uint8List> get fftStream => _fftDataSubject.stream;
+  /// Note: FFT functionality is only available on Android platform.
+  Stream<Uint8List> get fftStream => _isAndroid() 
+      ? _fftDataSubject.stream 
+      : const Stream.empty();
 
 
   /// The current player state containing only the processing and playing
@@ -1678,11 +1681,14 @@ class AudioPlayer {
       if (active) {
         // Cancel previous FFT subscription and set up new one.
         await _fftEventChannelSubscription?.cancel();
-        final fftEventChannel = EventChannel('com.ryanheise.just_audio.fft.$_id');
-        _fftEventChannelSubscription = fftEventChannel
-            .receiveBroadcastStream()
-            .map((data) => data as Uint8List)
-            .listen(_fftDataSubject.add, onError: _fftDataSubject.addError);
+        // FFT functionality is only available on Android platform
+        if (_isAndroid()) {
+          final fftEventChannel = EventChannel('com.ryanheise.just_audio.fft.$_id');
+          _fftEventChannelSubscription = fftEventChannel
+              .receiveBroadcastStream()
+              .map((data) => data as Uint8List)
+              .listen(_fftDataSubject.add, onError: _fftDataSubject.addError);
+        }
 
         if (playlist.children.isNotEmpty) {
           _playerEventSubject.add(playerEvent.copyWith(
